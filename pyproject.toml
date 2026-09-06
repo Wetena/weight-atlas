@@ -25,7 +25,7 @@ dependencies = [
 
 [project.optional-dependencies]
 blender = []
-umap = ["umap-learn>=0.5"]
+umap = ["umap-learn>=0.5", "squarify>=0.4"]
 activity = ["torch>=2.0", "transformers>=4.30"]
 mysql = ["pymysql>=1.1"]
 dev = ["pytest>=7", "ruff>=0.4", "mypy>=1.9", "scipy-stubs>=1.15"]

@@ -8,6 +8,7 @@ metadata stripped by the caller.
 """
 import json
 import math
+import os as _os
 import sys
 from typing import Any
 
@@ -34,6 +35,7 @@ DIST = argf("dist-factor", 2.1)
 LENS = argf("lens", 42.0)
 Z_SCALE = argf("z-scale", 7.0)
 GAMMA = argf("gamma", 1.35)
+LOG_HEIGHT = arg("log-height", "0") == "1"
 SUN_ALT = argf("sun-alt", 14.0)
 SUN_AZI = argf("sun-azi", 305.0)
 RES = int(argf("resolution", 1800))
@@ -82,7 +84,8 @@ ix = np.clip(((xs + SIZE / 2) / SIZE * (G - 1)).astype(int), 0, G - 1)
 iy = np.clip(((ys + SIZE / 2) / SIZE * (G - 1)).astype(int), 0, G - 1)
 h = Hn[iy, ix].astype(np.float64)
 present_g = present[iy, ix]
-positions[2::3] = np.where(present_g, (h ** GAMMA) * Z_SCALE + 0.05, 0.0)
+h_vis = np.log1p(h * 9) / np.log1p(9) if LOG_HEIGHT else h  # log1p normalised to [0,1]
+positions[2::3] = np.where(present_g, (h_vis ** GAMMA) * Z_SCALE + 0.05, 0.0)
 mesh.attributes["position"].data.foreach_set("vector", positions)
 
 colors = np.empty(len(mesh.vertices) * 4, dtype=np.float32)
@@ -139,18 +142,64 @@ if LABELS:
     em.inputs["Strength"].default_value = 2.2
     lbl_mat.node_tree.links.new(em.outputs["Emission"],
                                 lnodes["Material Output"].inputs["Surface"])
+    _meta_path = DENSITY.replace("_density.npz", "_meta.json")
+    _fracs = {}
+    _total = 0
+    if _os.path.exists(_meta_path):
+        _m = json.load(open(_meta_path))
+        _fracs = _m.get("family_param_fractions", {})
+        _total = _m.get("total_params", 0)
     for pk in peaks:
+        _f = pk["family"]
+        _lbl = FAM_LABEL.get(_f, _f)
+        if _f in _fracs and _total > 0:
+            _pct = _fracs[_f] * 100
+            _bp = _total * _fracs[_f]
+            _lbl = f"{_lbl}\n{_pct:.1f}% · {_bp/1e9:.1f}B"
         wx, wy = (pk["col"] / (G - 1) * SIZE - SIZE / 2,
                   pk["row"] / (G - 1) * SIZE - SIZE / 2)
-        wz = float((Hn[pk["row"], pk["col"]] ** GAMMA) * Z_SCALE + 0.05)
+        _hv = np.log1p(Hn[pk["row"], pk["col"]] * 9) / np.log1p(9) if LOG_HEIGHT else Hn[pk["row"], pk["col"]]
+        wz = float((_hv ** GAMMA) * Z_SCALE + 0.05)
         crv = bpy.data.curves.new(f"lbl_{pk['family']}", type="FONT")
-        crv.body = FAM_LABEL.get(pk["family"], pk["family"])
+        crv.body = _lbl
         crv.size = 0.22
         crv.align_x = "CENTER"; crv.align_y = "CENTER"
         txt: Any = bpy.data.objects.new(f"lbl_{pk['family']}", crv)
         txt.location = (wx, wy, wz + 0.22)
         scene.collection.objects.link(txt)
         txt.data.materials.append(lbl_mat)
+
+# ── scale bar + family percentages (on a plinth in front) ────────────────
+meta_path = DENSITY.replace("_density.npz", "_meta.json")
+import os as _os
+if _os.path.exists(meta_path):
+    _meta = json.load(open(meta_path))
+    _total = _meta.get("total_params", 0)
+    _fracs = _meta.get("family_param_fractions", {})
+    if _total > 0:
+        _major = sorted(_fracs.items(), key=lambda kv: -kv[1])[:5]
+        _lines = []
+        for _f, _pct in _major:
+            _p = _pct * 100
+            _label = FAM_LABEL.get(_f, _f)
+            _lines.append(f"{_label}: {_p:.1f}%")
+        _lines.append(f"Total: {_total/1e9:.1f}B params")
+        scale_body = " | ".join(_lines)
+        scrv = bpy.data.curves.new("scale_bar", type="FONT")
+        scrv.body = scale_body
+        scrv.size = 0.18
+        scrv.align_x = "CENTER"
+        smat = bpy.data.materials.new("ScaleBar")
+        smat.use_nodes = True
+        sem = smat.node_tree.nodes.new("ShaderNodeEmission")
+        sem.inputs["Color"].default_value = (0.85, 0.85, 0.85, 1.0)
+        sem.inputs["Strength"].default_value = 1.5
+        smat.node_tree.links.new(sem.outputs["Emission"],
+                                  smat.node_tree.nodes["Material Output"].inputs["Surface"])
+        sobj = bpy.data.objects.new("ScaleBar", scrv)
+        sobj.location = (0.0, -SIZE / 2 - 0.35, 0.05)
+        scene.collection.objects.link(sobj)
+        sobj.data.materials.append(smat)
 
 # golden hour
 sun = bpy.data.lights.new("Sun", type="SUN")

@@ -154,7 +154,15 @@ def build_density_field(
     (out_dir / "embedding_umap_records_meta.json").write_text(json.dumps(
         {"names": names, "slots": slots,
          "umap": umap_meta, "seed": seed,
-         "extent": [x0, x1, y0, y1], "grid": grid}))
+         "extent": [x0, x1, y0, y1], "grid": grid,
+         "family_param_fractions": {
+             f: round(float(sum(int(np.prod(tensors[n].get("shape") or [1]))
+                                for n, s in zip(names, slots, strict=True) if fam(s) == f)) /
+                      max(1, sum(int(np.prod(tensors[n].get("shape") or [1]))
+                                 for n in names)), 4)
+             for f in _FAMILIES if (fams == f).any()},
+         "total_params": int(sum(int(np.prod(tensors[n].get("shape") or [1]))
+                                 for n in names))}))
     meta = {"n_points": int(x_std.shape[0]), "seed": seed, "grid": grid,
             "umap": umap_meta}
     return height_grid, peaks, meta
@@ -252,6 +260,7 @@ class EmbeddingTerrainRenderer:
         resolution = int(kn("resolution", 1800, 400, 4096))
         samples = int(kn("samples", 96, 16, 1024))
         labels = bool(knobs.get("labels", True))
+        log_height = bool(knobs.get("log_height", False))
 
         # short deterministic knob fingerprint → parameter sets coexist
         import hashlib
@@ -279,6 +288,7 @@ class EmbeddingTerrainRenderer:
             "--density", str(density_npy),
             "--peaks", str(peaks_json),
             "--labels", "1" if labels else "0",
+            "--log-height", "1" if log_height else "0",
             "--pitch", str(pitch),
             "--yaw", str(yaw),
             "--dist-factor", str(dist_factor),
@@ -299,3 +309,46 @@ class EmbeddingTerrainRenderer:
         shutil.copy2(out_png, latest_png)
         self._done.add(suffix)
         return [out_png, latest_png]
+
+
+def render_treemap(out_dir: Path, tensors: dict[str, Any]) -> Path:
+    """Matplotlib treemap of parameter fractions by family (quick 2D complement).
+
+    Deterministic (no randomness). Saved as ``param_treemap.png`` in the
+    scan render dir. Small families get a minimum visible area.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    import squarify  # type: ignore[import-untyped]
+
+    fam_params: dict[str, int] = {}
+    for name, v in tensors.items():
+        f = fam(v.get("slot", map_name(name)[1]))
+        s = v.get("shape") or []
+        fam_params[f] = fam_params.get(f, 0) + int(np.prod(s)) if s else 0
+    # fallback if no numel from shape — compute from record
+    if not any(fam_params.values()):
+        for name, v in tensors.items():
+            f = fam(map_name(name)[1])
+            s = v.get("shape") or []
+            fam_params[f] = fam_params.get(f, 0) + int(np.prod(s))
+
+    # sort descending, drop zero entries
+    items = sorted(fam_params.items(), key=lambda kv: -kv[1])
+    items = [(f, p) for f, p in items if p > 0]
+    labels = [f"{f}\n{p / 1e9:.1f}B\n({p / sum(v for _, v in items) * 100:.1f}%)"
+              for f, p in items]
+    sizes = [p for _, p in items]
+
+    palette = plt.cm.Set3(np.linspace(0, 1, len(items)))
+    fig, ax = plt.subplots(figsize=(14, 7))
+    squarify.plot(sizes=sizes, label=labels, color=palette, ax=ax, alpha=0.85)
+    ax.set_title("Parameter distribution by tensor family", fontsize=14)
+    ax.axis("off")
+    fig.tight_layout()
+    png = out_dir / "render" / "param_treemap.png"
+    png.parent.mkdir(exist_ok=True)
+    fig.savefig(str(png), dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    return png

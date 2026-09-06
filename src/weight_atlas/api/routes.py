@@ -788,6 +788,7 @@ def create_router(
                 if isinstance(raw, str) and raw.strip():
                     sheet_knobs[key] = raw.strip()
             sheet_knobs["labels"] = form.get("labels") is not None
+            sheet_knobs["log_height"] = form.get("log_height") is not None
 
         new_job = job_queue.submit_render(job_id, renderer, sheet_knobs=sheet_knobs)
         return Response(
