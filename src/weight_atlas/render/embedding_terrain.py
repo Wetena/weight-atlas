@@ -308,7 +308,14 @@ class EmbeddingTerrainRenderer:
 
         shutil.copy2(out_png, latest_png)
         self._done.add(suffix)
-        return [out_png, latest_png]
+
+        produced = [out_png, latest_png]
+        try:
+            tm = render_treemap(scan_root, tensors)
+            produced.append(tm)
+        except Exception:
+            pass  # treemap is best-effort
+        return produced
 
 
 def render_treemap(out_dir: Path, tensors: dict[str, Any]) -> Path:

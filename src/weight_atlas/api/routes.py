@@ -243,6 +243,7 @@ def create_router(
         sheet_pngs = sorted(out_dir.glob("*_raw.png"))
         terrain_pngs = sorted(out_dir.glob("terrain_*.png"))
         embed_terrain_pngs = sorted(out_dir.glob("embedding_terrain*.png"))
+        treemap_pngs = sorted(out_dir.glob("param_treemap*.png"))
         obj_meshes = sorted(out_dir.glob("*.obj"))
         tif_files = sorted(out_dir.glob("field_*.tif"))
 
@@ -251,6 +252,7 @@ def create_router(
             sheet_pngs.extend(sorted(render_dir.glob("*_raw.png")))
             terrain_pngs.extend(sorted(render_dir.glob("terrain_*.png")))
             embed_terrain_pngs.extend(sorted(render_dir.glob("embedding_terrain*.png")))
+            treemap_pngs.extend(sorted(render_dir.glob("param_treemap*.png")))
             if not tif_files:
                 tif_files = sorted(render_dir.glob("field_*.tif"))
 
@@ -275,6 +277,7 @@ def create_router(
             "sheet_pngs": [f"render/{p.name}" for p in sheet_pngs],
             "terrain_pngs": [f"render/{p.name}" for p in terrain_pngs],
             "embed_terrain_pngs": [f"render/{p.name}" for p in embed_terrain_pngs],
+            "treemap_pngs": [f"render/{p.name}" for p in treemap_pngs],
             "obj_meshes": [str(p.name) for p in obj_meshes],
             "tif_files": [str(p.name) for p in tif_files],
             "out_dir": out_dir_rel,

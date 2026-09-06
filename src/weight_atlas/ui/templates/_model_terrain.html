@@ -25,6 +25,18 @@
     {% endif %}
 
     <h4>Embedding terrain (UMAP landscape)</h4>
+    {% if treemap_pngs %}
+    <div class="image-grid">
+        {% for png in treemap_pngs %}
+        <figure>
+            <a href="/models/{{ job.job_id }}/artifacts/{{ png }}" target="_blank" rel="noopener" title="Open full size">
+                <img loading="lazy" src="/models/{{ job.job_id }}/artifacts/{{ png }}" alt="{{ png }}">
+            </a>
+            <figcaption>{{ png }} — parameter distribution by family</figcaption>
+        </figure>
+        {% endfor %}
+    </div>
+    {% endif %}
     {% if embed_terrain_pngs %}
     <div class="image-grid">
         {% for png in embed_terrain_pngs %}
