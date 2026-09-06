@@ -63,4 +63,27 @@
         <button type="submit">Render embedding terrain (Cycles, minutes)</button>
     </form>
     <div id="embed-terrain-status"></div>
+
+    <details class="param-help">
+        <summary>Parameter quick reference</summary>
+        <table class="param-help-table">
+            <thead>
+                <tr><th>Knob</th><th>Range</th><th>What it does</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>pitch</code></td><td>5–89°</td><td>Camera tilt from horizontal. Low values = dramatic horizon view with long shadows; high values = top-down map.</td></tr>
+                <tr><td><code>yaw</code></td><td>0–360°</td><td>Camera rotation around the model. Rotates which tensor families face the viewer.</td></tr>
+                <tr><td><code>dist_factor</code></td><td>0.8–6×</td><td>Camera distance from terrain centre. Small = close-up detail; large = full overview (use 3–4 to frame the whole expert massif).</td></tr>
+                <tr><td><code>lens</code></td><td>20–120 mm</td><td>Focal length. Wide (20–35 mm) = dramatic perspective with visible depth; tele (80+ mm) = compressed, flat, more map-like.</td></tr>
+                <tr><td><code>z_scale</code></td><td>0.5–30</td><td>Height exaggeration. Higher values make the relief more dramatic; lower values keep the terrain closer to the data's true proportions.</td></tr>
+                <tr><td><code>gamma</code></td><td>0.5–3</td><td>Height curve. Below 1 lifts valleys and compresses peaks; above 1 emphasizes peaks and deepens valleys.</td></tr>
+                <tr><td><code>sun_alt</code></td><td>2–80°</td><td>Sun altitude above the horizon. Low values = long dramatic shadows (golden hour); high values = flat overhead lighting.</td></tr>
+                <tr><td><code>sun_azi</code></td><td>0–360°</td><td>Sun compass direction. Rotates which side of the terrain is lit vs shadowed.</td></tr>
+                <tr><td><code>resolution</code></td><td>400–4096 px</td><td>Output image width in pixels. 1800 is fine for the UI; 4096 for publication-quality exports.</td></tr>
+                <tr><td><code>samples</code></td><td>16–1024</td><td>Cycles quality. More samples = less render noise but slower (each render is minutes on CPU).</td></tr>
+                <tr><td><code>labels</code></td><td>on/off</td><td>Peak annotations: white glowing labels at each tensor family's densest cluster (e.g. "expert massif", "attention", "n-gram").</td></tr>
+            </tbody>
+        </table>
+        <p class="hint">Each distinct parameter set produces a separate <code>embedding_terrain_&lt;hash&gt;.png</code>; older renders are conserved. The file without a hash always shows the latest render.</p>
+    </details>
 </section>
