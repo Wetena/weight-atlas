@@ -242,6 +242,7 @@ def create_router(
 
         sheet_pngs = sorted(out_dir.glob("*_raw.png"))
         terrain_pngs = sorted(out_dir.glob("terrain_*.png"))
+        embed_terrain_pngs = sorted(out_dir.glob("embedding_terrain*.png"))
         obj_meshes = sorted(out_dir.glob("*.obj"))
         tif_files = sorted(out_dir.glob("field_*.tif"))
 
@@ -249,6 +250,7 @@ def create_router(
         if render_dir.exists():
             sheet_pngs.extend(sorted(render_dir.glob("*_raw.png")))
             terrain_pngs.extend(sorted(render_dir.glob("terrain_*.png")))
+            embed_terrain_pngs.extend(sorted(render_dir.glob("embedding_terrain*.png")))
             if not tif_files:
                 tif_files = sorted(render_dir.glob("field_*.tif"))
 
@@ -272,6 +274,7 @@ def create_router(
             },
             "sheet_pngs": [f"render/{p.name}" for p in sheet_pngs],
             "terrain_pngs": [f"render/{p.name}" for p in terrain_pngs],
+            "embed_terrain_pngs": [f"render/{p.name}" for p in embed_terrain_pngs],
             "obj_meshes": [str(p.name) for p in obj_meshes],
             "tif_files": [str(p.name) for p in tif_files],
             "out_dir": out_dir_rel,
@@ -775,6 +778,16 @@ def create_router(
             fractal_mode = form.get("fractal_mode")
             if fractal_mode in ("fbm", "sdf"):
                 sheet_knobs["fractal_mode"] = fractal_mode
+        elif renderer == "embedding_terrain":
+            # Camera/light/relief knobs for the UMAP landscape render.
+            # Values are clamped inside the renderer; unknown keys dropped.
+            for key in ("pitch", "yaw", "dist_factor", "lens", "z_scale",
+                        "gamma", "sun_alt", "sun_azi", "resolution",
+                        "samples"):
+                raw = form.get(key)
+                if isinstance(raw, str) and raw.strip():
+                    sheet_knobs[key] = raw.strip()
+            sheet_knobs["labels"] = form.get("labels") is not None
 
         new_job = job_queue.submit_render(job_id, renderer, sheet_knobs=sheet_knobs)
         return Response(

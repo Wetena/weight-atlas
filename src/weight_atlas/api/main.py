@@ -77,6 +77,10 @@ def create_app(
     else:
         job_queue = jobmod.JobQueue(_db_path, on_job=lambda j: None)
 
+    # Renderer registration (side-effect imports; embedding_terrain is a
+    # Blender+Cycles plugin — imports fine, only *renders* need blender).
+    from weight_atlas.render import embedding_terrain  # noqa: F401
+
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
         """Start the worker on startup, stop it cleanly on shutdown."""

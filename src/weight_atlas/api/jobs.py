@@ -439,6 +439,16 @@ class JobQueue:
         from weight_atlas.core.registry import get_renderer
         from weight_atlas.fields.rasterizer import load_channel_field
 
+        # Renderer side-effect imports: the worker may run without having
+        # passed through create_app (tests, standalone drains).
+        from weight_atlas.render import (  # noqa: F401
+            blender,  # noqa: F401
+            embedding_terrain,  # noqa: F401
+            fractal,  # noqa: F401
+            matplotlib_sheet,  # noqa: F401
+            preview,  # noqa: F401
+        )
+
         out_dir = Path(job.out_dir)
         render_dir = out_dir / "render"
         render_dir.mkdir(exist_ok=True)
@@ -463,7 +473,14 @@ class JobQueue:
             if field is None:
                 continue
             try:
-                paths = renderer_obj.render(field, spec, render_dir)
+                if renderer_id == "embedding_terrain":
+                    # knob-driven single artefact (no per-channel iteration)
+                    paths = renderer_obj.render(
+                        field, spec, render_dir, field_name=channel,
+                        knobs=dict(job.sheet_knobs or {}),
+                    )
+                else:
+                    paths = renderer_obj.render(field, spec, render_dir)
                 produced.extend(str(p.name) for p in paths)
             except Exception:  # noqa: BLE001 — per-channel render is best-effort
                 logger.warning(
