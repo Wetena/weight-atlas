@@ -23,6 +23,7 @@ from typing import Any
 
 import numpy as np
 
+from weight_atlas.core.name_map import map_name
 from weight_atlas.core.registry import register_renderer
 from weight_atlas.core.types import AtlasSpec, Field2D
 from weight_atlas.render.blender.blender_wrapper import (
@@ -32,7 +33,7 @@ from weight_atlas.render.blender.blender_wrapper import (
 )
 from weight_atlas.render.blender.render_terrain import _strip_png_metadata
 
-_SCRIPT = Path(__file__).resolve().parent / "render_umap_terrain.py"
+_SCRIPT = Path(__file__).resolve().parent / "blender" / "render_umap_terrain.py"
 
 _FAMILIES = ("expert", "shared_expert", "router", "attn", "mlp", "ssm",
              "hc", "ngram", "embed", "norm", "v", "other")
@@ -79,7 +80,8 @@ def record_matrix(tensors: dict[str, Any]) -> tuple[np.ndarray, list[str], list[
         rows.append([float(x) for x in vals] +
                     [float(np.log10(max(int(np.prod(s)) if s else 1, 1)))])
         names.append(name)
-        slots.append(str(v.get("slot", "other")))
+        # fingerprints don't store per-tensor slots — derive from the name
+        slots.append(fam(map_name(name)[1]))
     matrix = np.array(rows, dtype=np.float64)
     for j in range(matrix.shape[1]):
         col = matrix[:, j]
@@ -194,18 +196,42 @@ class EmbeddingTerrainRenderer:
         density_cache = scan_root / "embedding_terrain_density.npz"
         if density_cache.exists():
             # precomputed density (previous render or scan-time artefact):
-            # reuse verbatim — UMAP is the expensive step and deterministic
+            # reuse verbatim — UMAP is the expensive step and deterministic.
+            # Peaks are recomputed from the density grid if the peaks file
+            # is missing (it is written after every build below).
             d = np.load(density_cache)
             height_grid = d["Hn"]
-            peaks = json.loads(
-                (scan_root / "embedding_terrain_peaks.json").read_text()
-            ) if (scan_root / "embedding_terrain_peaks.json").exists() else []
+            dominance = d["dom"]
+            families = [str(x) for x in d["fams"]]
+            peaks_file = scan_root / "embedding_terrain_peaks.json"
+            if peaks_file.exists():
+                peaks = json.loads(peaks_file.read_text())
+            else:
+                stack = np.stack([
+                    np.where(dominance == i, height_grid, -1.0)
+                    for i in range(len(families))
+                ])
+                peaks = []
+                for fi, f in enumerate(families):
+                    cell = stack[fi]
+                    if (cell > -1).sum() == 0:
+                        continue
+                    cy, cx = np.unravel_index(cell.argmax(), cell.shape)
+                    peaks.append({"family": f, "row": int(cy), "col": int(cx)})
             meta = {"n_points": -1, "seed": 0, "grid": int(height_grid.shape[0]),
                     "umap": {}, "cached": True}
         else:
             height_grid, peaks, meta = build_density_field(tensors, scan_root, spec)
 
-        np.save(out / "embedding_terrain_height.npy", height_grid)
+        # persist the density grid so repeat renders skip the UMAP rebuild
+        density_path = scan_root / "embedding_terrain_density.npz"
+        if not density_path.exists():
+            import numpy as _np
+
+            _np.savez(density_path, Hn=height_grid,
+                      dom=np.zeros_like(height_grid, dtype=np.int64),
+                      present=np.ones_like(height_grid, dtype=bool),
+                      fams=np.array(_FAMILIES))
         (out / "embedding_terrain_peaks.json").write_text(json.dumps(peaks, indent=1))
 
         def kn(name: str, default: float, lo: float, hi: float) -> float:
@@ -232,14 +258,14 @@ class EmbeddingTerrainRenderer:
 
         blender_path = resolve_blender_path()
         env = build_blender_env()
-        height_npy = out / "embedding_terrain_height.npy"
+        density_npy = scan_root / "embedding_terrain_density.npz"
         peaks_json = out / "embedding_terrain_peaks.json"
         out_png = out / "embedding_terrain.png"
 
         cmd = [
             str(blender_path), "-b", "-P", str(_SCRIPT),
             "--",
-            "--density", str(height_npy),
+            "--density", str(density_npy),
             "--peaks", str(peaks_json),
             "--labels", "1" if labels else "0",
             "--pitch", str(pitch),
