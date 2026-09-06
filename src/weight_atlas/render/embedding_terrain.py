@@ -174,7 +174,7 @@ class EmbeddingTerrainRenderer:
     renderer_id = "embedding_terrain"
 
     def __init__(self) -> None:
-        self._done: set[Path] = set()
+        self._done: set[str] = set()
 
     def render(self, field: Field2D, spec: AtlasSpec, out: Path,
                *, field_name: str = "height",
@@ -253,14 +253,25 @@ class EmbeddingTerrainRenderer:
         samples = int(kn("samples", 96, 16, 1024))
         labels = bool(knobs.get("labels", True))
 
-        if out in self._done and (out / "embedding_terrain.png").exists():
-            return []  # one artefact per scan — channel iteration is irrelevant
+        # short deterministic knob fingerprint → parameter sets coexist
+        import hashlib
+
+        knob_key = "|".join(
+            f"{k}={knobs.get(k, '')}" for k in sorted(knobs)
+        ) + f"|pitch={pitch}|yaw={yaw}|dist={dist_factor}|lens={lens}"
+        suffix = hashlib.sha256(knob_key.encode()).hexdigest()[:8]
+        if suffix in self._done:
+            return []  # same parameter set already rendered this instance
 
         blender_path = resolve_blender_path()
         env = build_blender_env()
         density_npy = scan_root / "embedding_terrain_density.npz"
         peaks_json = out / "embedding_terrain_peaks.json"
-        out_png = out / "embedding_terrain.png"
+
+
+        out_png = out / f"embedding_terrain_{suffix}.png"
+        # also write/copy as the canonical name (latest render)
+        latest_png = out / "embedding_terrain.png"
 
         cmd = [
             str(blender_path), "-b", "-P", str(_SCRIPT),
@@ -282,7 +293,9 @@ class EmbeddingTerrainRenderer:
         ]
         run_blender_command(cmd, env)
         _strip_png_metadata(str(out_png))
-        self._done.add(out)
-        self._last_key = (str(out.resolve()), pitch, yaw, dist_factor)
-        self._last_produced = [out_png]
-        return [out_png]
+        # keep the canonical name pointing at the newest render
+        import shutil
+
+        shutil.copy2(out_png, latest_png)
+        self._done.add(suffix)
+        return [out_png, latest_png]
