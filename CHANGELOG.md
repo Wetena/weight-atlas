@@ -1,9 +1,35 @@
 ## [Unreleased]
 
+### Records tab: outlier-impact visualizations (OCGQuant framing)
+
+The records boards rendered bare numbers; the outlier story is now told
+visually with three deterministic server-side SVGs (no JS, no client
+deps), following the collateral-quantization-error framing of OCGQuant
+(arXiv:2609.00066): a channel that dominates its row/column sets the
+per-channel quantization scale, so companion channels inherit its
+magnitude as collateral error.
+
+- **Outlier impact ranking**: top-10 tensors by channel-scale dominance
+  (max of `row_amax_ratio`/`col_amax_ratio`), log-scaled bars in slot
+  colors, hover shows the row/col split
+- **Depth profile**: max `row_amax_ratio` per layer, peak layer circled —
+  where in depth outlier channels concentrate
+- **Board-leader strips**: each amax board leader as a marker over the
+  model-wide metric distribution (box plot strip with p25–p75, median,
+  p99, log-scaled when warranted)
+- Data selection is pure + deterministic (`api/query.py`:
+  `outlier_impact`, `layer_profile`, `distribution_strip`); renders are
+  byte-identical across requests; old fingerprints without the metrics
+  render exactly as before
+- Design notes: `docs/2026-09-09_records-outlier-visualization.md`;
+  tests: `tests/test_records_viz.py`
+
 ### EXL3 loader (M4.5): trellis dequantization and scan integration
 
 New loader `exl3` for EXL3 checkpoints (exllamav3 trellis quantization,
-QTIP-derived), validated against the exllamav3 reference CUDA kernels.
+QTIP-derived); verification covers bit-exact tile reconstruction against
+the exllamav3 reference CUDA kernels — 15/15 sampled tiles on the real
+model, 43 tests in `tests/test_exl3.py` (details below).
 
 - New modules: `loaders/exl3_dequant.py` (pure-NumPy dequantization) and
   `loaders/exl3_loader.py` (registry id `exl3`)
